@@ -24,9 +24,9 @@ link_directories(/usr/local/lib)
 include(GoogleTest)
 add_library(rtpall
 		src/rtp.c
+		src/rtp_more_file_1.c
+		src/rtp_more_file_2.c
 		src/util.c
-		src/rtp_more_file1.c
-		src/rtp_more_file2.c
 )
 
 add_library(rtpsender src/sender_def.c)
