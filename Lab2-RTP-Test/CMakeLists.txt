@@ -25,6 +25,8 @@ include(GoogleTest)
 add_library(rtpall
 		src/rtp.c
 		src/util.c
+		src/rtp_more_file1.c
+		src/rtp_more_file2.c
 )
 
 add_library(rtpsender src/sender_def.c)
