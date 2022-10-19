@@ -42,7 +42,6 @@ int main(int argc, char **argv)
     listenfd = open_listenfd(argv[2]);
 
     struct myFTP_Header REPLY;
-    uint32_t message_length;
     char recv_buffer[MAXLINE];
 
     while (1) {
@@ -55,13 +54,12 @@ int main(int argc, char **argv)
             while (1){
                 while (!read(connfd, &REPLY, sizeof(REPLY)));
 
-                size_t size = 12;
-                message_length = ntohl(REPLY.m_length);
-                while (size < message_length) {
-                    size_t b = read(connfd, recv_buffer + size - 12, MAXLINE);
+                size_t ret = 0, payload_length = ntohl(REPLY.m_length) - 12;
+                while (ret < payload_length) {
+                    size_t b = read(connfd, recv_buffer + ret, payload_length - ret);
                     if (b == 0) {printf("Socket closed.\n"); break;}
                     if (b < 0) {printf("Error\n"); break;}
-                    size += b;
+                    ret += b;
                 }
 
                 if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA3){
@@ -180,14 +178,22 @@ void download_files(char* filename){
     write(connfd, &GET_REPLY, sizeof(GET_REPLY));
     fseek(fp, 0, SEEK_END);
     unsigned long file_size = ftell(fp);
-    char *buffer = (char*)malloc(sizeof(char)*(file_size + 12));
+    size_t ret = 0, len = 12 + file_size;
+    char *buffer = (char*)malloc(sizeof(char)*len);
     rewind(fp);
     fread(buffer + 12, sizeof(char), file_size, fp);
 
     GET_REPLY.m_type = 0xFF;
-    GET_REPLY.m_length = htonl(12 + (uint32_t)file_size);
+    GET_REPLY.m_length = htonl((uint32_t)len);
     memcpy(buffer, &GET_REPLY, sizeof(GET_REPLY));
-    write(connfd, buffer, sizeof(GET_REPLY) + file_size);
+    //write(connfd, buffer, sizeof(GET_REPLY) + file_size);
+    while (ret < len) {
+        size_t b = write(connfd, buffer + ret, len - ret);
+        if (b == 0) {printf("Socket closed.\n"); break;}
+        if (b < 0) {printf("Error\n"); break;}
+        ret += b;
+    }
+
     free(buffer);
 
     return;
@@ -203,14 +209,14 @@ void upload_files(char* payload){
     
     while (!read(connfd, &PUT_REPLY, sizeof(PUT_REPLY)));
 
-    size_t file_size = ntohl(PUT_REPLY.m_length) - 12, size = 0;
+    size_t ret = 0, file_size = ntohl(PUT_REPLY.m_length) - 12;
     char* buffer = (char*)malloc(sizeof(char)*file_size);
 
-    while (size < file_size) {
-        size_t b = read(connfd, buffer + size, file_size - size);
+    while (ret < file_size) {
+        size_t b = read(connfd, buffer + ret, file_size - ret);
         if (b == 0) {printf("Socket closed.\n"); break;}
         if (b < 0) {printf("Error\n"); break;}
-        size += b;
+        ret += b;
     }
 
     FILE *fp;

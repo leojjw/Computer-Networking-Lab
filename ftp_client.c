@@ -185,20 +185,17 @@ int main(int argc, char **argv)
     LIST_REQUEST.m_length = htonl(12);
     write(clientfd, &LIST_REQUEST, sizeof(LIST_REQUEST));
 
-    size_t size = 12;
-    uint32_t message_length;
-
     while (!read(clientfd, &LIST_REQUEST, sizeof(LIST_REQUEST)));
 
-    message_length = ntohl(LIST_REQUEST.m_length);
-    while (size < message_length) {
-        size_t b = read(clientfd, list + size - 12, MAXLINE);
+    size_t ret = 0, len = ntohl(LIST_REQUEST.m_length) - 12;
+    while (ret < len) {
+        size_t b = read(clientfd, list + ret, len - ret);
         if (b == 0) {printf("Socket closed.\n"); break;}
         if (b < 0) {printf("Error\n"); break;}
-        size += b;
+        ret += b;
     }
-
     printf("----- file list start -----\n%s----- file list end -----\n", list);
+
     return;
  }
 
@@ -222,14 +219,14 @@ void download_files(char* payload){
 
         while (!read(clientfd, &GET_REQUEST, sizeof(GET_REQUEST)));
 
-        size_t file_size = ntohl(GET_REQUEST.m_length) - 12, size = 0;
+        size_t ret = 0, file_size = ntohl(GET_REQUEST.m_length) - 12;
         buffer = (char*)malloc(sizeof(char)*file_size);
 
-        while (size < file_size) {
-            size_t b = read(clientfd, buffer + size, file_size - size);
+        while (ret < file_size) {
+            size_t b = read(clientfd, buffer + ret, file_size - ret);
             if (b == 0) {printf("Socket closed.\n"); break;}
             if (b < 0) {printf("Error\n"); break;}
-            size += b;
+            ret += b;
         }
 
         FILE *fp;
@@ -269,15 +266,23 @@ void upload_files(char* payload){
 
     fseek(fp, 0, SEEK_END);
     unsigned long file_size = ftell(fp);
-    buffer = (char*)malloc(sizeof(char)*file_size + 12);
+    size_t ret = 0, length = 12 + file_size;
+    buffer = (char*)malloc(sizeof(char)*length);
     rewind(fp);
     fread(buffer + 12, sizeof(char), file_size, fp);
 
     PUT_REQUEST.m_type = 0xFF;
-    PUT_REQUEST.m_length = htonl(12 + (uint32_t)file_size);
+    PUT_REQUEST.m_length = htonl((uint32_t)length);
     memcpy(buffer, &PUT_REQUEST, sizeof(PUT_REQUEST));
-    write(clientfd, buffer, sizeof(PUT_REQUEST) + file_size);
+    //write(clientfd, buffer, sizeof(PUT_REQUEST) + file_size);
+    while (ret < length) {
+        size_t b = write(clientfd, buffer + ret, length - ret);
+        if (b == 0) {printf("Socket closed.\n"); break;}
+        if (b < 0) {printf("Error\n"); break;}
+        ret += b;
+    }
     printf("File uploaded.\n");
+    free(buffer);
 
     return;
 }
