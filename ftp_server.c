@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     int listenfd;
     socklen_t clientlen;
     struct sockaddr_in clientaddr;
-    pthread_t tid;
+
 
     
     //struct myftp_header OPEN_CONN_REPLY, AUTH_REPLY;
@@ -104,19 +104,27 @@ int main(int argc, char **argv)
                 //write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
             }
             */
-            while (!recv(connfd, recv_buffer, sizeof(recv_buffer), 0));
-            memcpy(&REPLY, recv_buffer, sizeof(REPLY));
             //while (!read(connfd, &REPLY, sizeof(REPLY)));
-            /*
-            printf("yo %s\n", REPLY.m_protocol);
-            printf("%d\n", (!strncmp(REPLY.m_protocol, "\xe3myftp", 6)));
-            printf("%d\n", (REPLY.m_type == 0xA3));
-            printf("%x\n", REPLY.m_type);
-            */
+            size_t size = 0;
+            while (size < sizeof(struct myftp_header)) {
+                size_t b = recv(connfd, recv_buffer + size, MAXLINE, 0);
+                if (b == 0) {printf("socket Closed"); break;} // 当连接断开
+                if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
+                size += b; // 成功将b个byte塞进了缓冲区
+            }
+            //while((size += recv(connfd, recv_buffer + size, MAXLINE, 0)) < sizeof(struct myftp_header));
+            printf("fir %ld\n", size);
+            memcpy(&REPLY, recv_buffer, sizeof(REPLY));
+            printf("%d\n", REPLY.m_length);
+            while (size < ntohl(REPLY.m_length)) {
+                size_t b = recv(connfd, recv_buffer + size, MAXLINE, 0);
+                if (b == 0) {printf("socket Closed"); break;} // 当连接断开
+                if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
+                size += b; // 成功将b个byte塞进了缓冲区
+            }
+            printf("sec\n");
             if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA3){
-                //printf("!!!!\n");
                 if (!authentication(recv_buffer + sizeof(struct myftp_header))){
-                    //printf("???\n");
                     continue;
                 }
             } else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xAB){
@@ -179,45 +187,36 @@ void open_connection(){
 
 int authentication(char* payload){
     struct myftp_header AUTH_REPLY;
-    //char auth[payload_length + 1];
 
-    //while (!read(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY)));
-    //while (!read(connfd, auth, payload_length));
-    //auth[payload_length] = '\0';
-    //auth[payload_length] = '\0';
-            //AUTH_REQUEST.m_payload[AUTH_REPLY.m_length - 13] = '\0';
-            /*
-    if (!strncmp(AUTH_REPLY.m_protocol, "\xe3myftp", 6) && AUTH_REPLY.m_type == 0xA3){
-                //memcpy(AUTH_REPLY.m_protocol, "\xe3myftp", 6);
-        AUTH_REPLY.m_type = 0xA4;
-        AUTH_REPLY.m_length = 12;
-                //printf("%ld %s\n", strlen(auth), auth);
-        if (!strcmp(auth, "user 123123")){
-            AUTH_REPLY.m_status = 1;
-            write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-            return 1;
-        } else {
-            AUTH_REPLY.m_status = 0;
-            write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-            close(connfd);
-            return 0;
-        }
-                
-                //printf("server reveived request header\n");
-                //write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-    }*/
-    //bzero(&AUTH_REPLY, sizeof(AUTH_REPLY));
     memcpy(AUTH_REPLY.m_protocol, "\xe3myftp", 6);
     AUTH_REPLY.m_type = 0xA4;
     AUTH_REPLY.m_length = htonl(12);
-                //printf("%ld %s\n", strlen(auth), auth);
+    
     if (!strcmp(payload, "user 123123\0")){
         AUTH_REPLY.m_status = 1;
-        send(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY), 0);
+        write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
+        /*
+        size_t size = 0;
+        while (size < sizeof(struct myftp_header)) {
+            size_t b = send(connfd, &AUTH_REPLY + size, sizeof(struct myftp_header) - size, 0);
+            if (b == 0) printf("socket Closed"); // 当连接断开
+            if (b < 0) printf("Error ?"); // 这里可能发生了一些意料之外的情况
+            size += b; // 成功将b个byte塞进了缓冲区
+        }
+        */
         return 1;
     } else {
         AUTH_REPLY.m_status = 0;
-        send(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY), 0);
+        write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
+        /*
+        size_t size = 0;
+        while (size < sizeof(struct myftp_header)) {
+            size_t b = send(connfd, &AUTH_REPLY + size, sizeof(struct myftp_header) - size, 0);
+            if (b == 0) printf("socket Closed"); // 当连接断开
+            if (b < 0) printf("Error ?"); // 这里可能发生了一些意料之外的情况
+            size += b; // 成功将b个byte塞进了缓冲区
+        }
+        */
         close(connfd);
         return 0;
     }

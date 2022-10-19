@@ -31,7 +31,7 @@ struct myftp_header_auth {
 
 
 void open_clientfd(char* host, char* port);
-void authentication(char* username, char* password);
+void authentication(char* payload);
 void list_files();
 void download_files(char* filename);
 void upload_files(char* filename);
@@ -41,14 +41,33 @@ void check_connection();
 
 int main(int argc, char **argv)
 {
+    /*
+    char buff[MAXLINE];
+    while (fgets(buff, MAXLINE, stdin) != NULL) {
+        printf("%s\n", buff);
+    }
+    char ex[20] = "au\nau\n0123";
+    ex[6] = '\0';
+    printf("%ld %s\n", strlen(ex), ex);
+    exit(0);
+    */
+
     //printf("%ld\n", sizeof(struct myftp_header_auth));
     char *host, *port, *payload, *p2, buf[MAXLINE];
 
     char delim[] = " ";
+
+    //int i = 0;
     
     while (fgets(buf, MAXLINE, stdin) != NULL) {
         //printf("%ld", strlen(buf));
-        //buf[strlen(buf) - 1] = ' ';
+        /*
+        i = 0;
+        while(buf[i] != '\n')
+            i++;
+        buf[i] = '\0';
+        */
+        buf[strlen(buf) - 1] = ' ';
         char* cmd = strtok(buf, delim);
         //printf("%s\n", cmd);
         if (!strcmp(cmd, "open")){
@@ -63,7 +82,6 @@ int main(int argc, char **argv)
         }
         
         else if (!strcmp(cmd, "auth")){
-            //printf("auth come\n");
             if (client_status == 0){
                 printf("No connection existing.\n");
                 continue;
@@ -73,11 +91,10 @@ int main(int argc, char **argv)
                 continue;
             }
             payload = strtok(NULL, delim);
-            p2 = strtok(NULL, delim);
-            //strtok(NULL, delim);
+            strtok(NULL, delim);
             //password = strtok(NULL, delim);
             //printf("%ld %ld\n", strlen(username), strlen(password));
-            authentication(payload, p2);
+            authentication(payload);
             continue;
         }
 
@@ -136,7 +153,7 @@ int main(int argc, char **argv)
 
  void open_clientfd(char *host, char *port) {
     struct sockaddr_in servaddr;
-    struct myftp_header yoyo;
+    struct myftp_header OPEN_CONN_REQUEST;
 
     clientfd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
@@ -145,14 +162,15 @@ int main(int argc, char **argv)
     inet_pton(AF_INET, host, &servaddr.sin_addr);
     if (!connect(clientfd, (struct sockaddr *) &servaddr, sizeof(servaddr))){
         //bzero(&OPEN_CONN_REQEST, sizeof(OPEN_CONN_REQEST));
-        memcpy(yoyo.m_protocol, "\xe3myftp", 6);
-        yoyo.m_type = 0xA1;
-        yoyo.m_length = htonl(12);
-        write(clientfd, &yoyo, sizeof(yoyo));
-        while (!read(clientfd, &yoyo, sizeof(yoyo)));
+        memcpy(OPEN_CONN_REQUEST.m_protocol, "\xe3myftp", 6);
+        OPEN_CONN_REQUEST.m_type = 0xA1;
+        OPEN_CONN_REQUEST.m_length = htonl(12);
+        write(clientfd, &OPEN_CONN_REQUEST, sizeof(OPEN_CONN_REQUEST));
+        while (!read(clientfd, &OPEN_CONN_REQUEST, sizeof(OPEN_CONN_REQUEST)));
         //printf("yo %s\n", OPEN_CONN_REQEST.m_protocol);
-        if (yoyo.m_status == 1){
-            client_status= 1;
+        client_status= 1;
+        if (OPEN_CONN_REQUEST.m_status == 1){
+            
             printf("Server connection accepted.\n");
             return;
         }
@@ -161,65 +179,62 @@ int main(int argc, char **argv)
     return;
  }
 
- void authentication(char* payload, char* p2){
+ void authentication(char* payload){
     struct myFTP_message{
         struct myftp_header AUTH_REQUEST;
         char payload[50];
     } AUTH_MESSAGE;
     struct myftp_header AUTH_REPLY;
-    //struct myftp_header_auth AUTH_REQUEST;
     char send_buffer[MAXLINE];
-    char payl[MAXLINE] = "";
-    memset(send_buffer, 0, sizeof(send_buffer));
 
-    //int i = strlen(payload) + 1;
-    //payload[strlen(payload)] = ' ';
-
-    //printf("%ld %s\n", strlen(payload), payload);
-
-    //memcpy(AUTH_REQUEST.m_payload, payload, 12);
-    //AUTH_REQUEST.m_payload[11] = '\0';
-
-    int i = 0;
-    while (p2[i] > 32 && p2[i] < 127)
+    payload[strlen(payload)] = ' ';
+    /*
+    int i = 0, j = 0;
+    while (payload[i] > 32 && payload[i] < 127){
+        AUTH_MESSAGE.payload[i] = payload[i];
         i++;
-    p2[i] = '\0';
-    //printf("%ld %ld\n", strlen(payload), strlen(p2));
-    int len = strlen(payload) + strlen(p2);
-    //printf("%d\n", len);
-    strcat(payl, payload);
-    payl[strlen(payload)] = ' ';
-    strcat(payl, p2);
-    //printf("%s\n", payl);
+    }
+    AUTH_MESSAGE.payload[i] = ' ';
+    i++;
+    while (password[j] > 32 && password[j] < 127){
+        AUTH_MESSAGE.payload[i] = password[j];
+        i++; j++;
+    }
+    AUTH_MESSAGE.payload[i] = '\0';
+    */
 
+    strcpy(AUTH_MESSAGE.payload, payload);
+    int len = 12 + strlen(AUTH_MESSAGE.payload) + 1;
 
-    //strcpy(AUTH_REQUEST.m_payload, payload);
-    //printf("%ld %s\n", strlen(AUTH_REQUEST.m_payload), AUTH_REQUEST.m_payload);
-
-    //strcat(username, " ");
-    //strcat(username, password);
-    //printf("%ld %s yoyo\n", strlen(username), username);
-    //printf("payload come\n");
-
-    //bzero(&AUTH_REQUEST, sizeof(AUTH_REQUEST));
     memcpy(AUTH_MESSAGE.AUTH_REQUEST.m_protocol, "\xe3myftp", 6);
     AUTH_MESSAGE.AUTH_REQUEST.m_type = 0xA3;
-    //printf("1 %x\n", AUTH_REQUEST.m_type);
-    AUTH_MESSAGE.AUTH_REQUEST.m_length = htonl(12 + len + 2);
-    //printf("%d\n", (AUTH_REQUEST.m_length));
-    //memcpy(send_buffer, &AUTH_REQUEST, sizeof(AUTH_REQUEST));
-    memcpy(AUTH_MESSAGE.payload, payl, len + 2);
-    AUTH_MESSAGE.payload[len + 2 - 1] = '\0';
-    //printf("2 %x\n", AUTH_REQUEST.m_type);
-    send(clientfd, &AUTH_MESSAGE, 12 + len + 2, 0);
-    //write(clientfd, payload, strlen(payload));
-    //printf("%ld\n", strlen(payload));
-    //printf("writed\n");
-    //while (!read(clientfd, &AUTH_REQUEST, sizeof(AUTH_REQUEST)));
-    while (!recv(clientfd, &AUTH_REPLY, 12, 0));
-    //memcpy(&AUTH_REQUES, send_buffer, sizeof(struct myftp_header));
-    //printf("waiting over\n");
-    if (!strncmp(AUTH_REPLY.m_protocol, "\xe3myftp", 6) && AUTH_REPLY.m_type == (char)0xA4){
+    AUTH_MESSAGE.AUTH_REQUEST.m_length = htonl(len);
+    
+    memcpy(send_buffer, &AUTH_MESSAGE, len);
+    //send_buffer[len - 1] = '\0';
+
+    size_t size = 0;
+    while (size < len) {
+        size_t b = send(clientfd, send_buffer + size, len - size, 0);
+        if (b == 0) {printf("socket Closed"); break;} // 当连接断开
+        if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
+        size += b; // 成功将b个byte塞进了缓冲区
+    }
+    printf("sent\n");
+    size = 0;
+
+    /*
+    while (size < sizeof(struct myftp_header)) {
+        size_t b = recv(clientfd, &AUTH_REPLY + size, sizeof(struct myftp_header), 0);
+        if (b == 0) {printf("socket Closed"); break;} // 当连接断开
+        if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
+        size += b; // 成功将b个byte塞进了缓冲区
+    }
+    */
+    while((!read(clientfd, &AUTH_REPLY, sizeof(AUTH_REPLY))));
+    printf("received\n");
+
+    if (!strncmp(AUTH_REPLY.m_protocol, "\xe3myftp", 6) && (AUTH_REPLY.m_type == (char)0xA4)){
         if (AUTH_REPLY.m_status == 1){
             printf("Authentication granted.\n");
             client_status = 2;
