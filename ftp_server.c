@@ -6,150 +6,81 @@
 #include "arpa/inet.h"
 #include "pthread.h"
 
-#define	MAXLINE	 2048           /* Max text line length */
+#define	MAXLINE	 2048                     /* Max text line length */
 #define MAGIC_NUMBER_LENGTH 6
-#define LISTENQ 1024            /* Second argument to listen() */
+#define LISTENQ 1024                      /* Second argument to listen() */
 
-struct myftp_header {
+int connfd;
+
+struct myFTP_Header {
     char m_protocol[MAGIC_NUMBER_LENGTH]; /* protocol magic number (6 bytes) */
     char m_type;                          /* type (1 byte) */
     char m_status;                        /* status (1 byte) */
     uint32_t m_length;                    /* length (4 bytes) in Big endian*/
 } __attribute__ ((packed));
 
-
-/*
-void doit(int fd);
-void read_requesthdrs(rio_t *rp);
-int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
-void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-*/
-
 int open_listenfd(char* port);
 void open_connection();
 int authentication(char* payload);
 void list_files();
-void download_files(int filename_length);
-void upload_files(int filename_length);
+void download_files(char* filename);
+void upload_files(char* filename);
 void close_connection();
-
-int connfd;
-int authenticate = 0;
-//struct myftp_header_auth REPLY;
 
 int main(int argc, char **argv)
 {
-    int listenfd;
-    socklen_t clientlen;
-    struct sockaddr_in clientaddr;
-
-
-    
-    //struct myftp_header OPEN_CONN_REPLY, AUTH_REPLY;
-    //struct myftp_header_auth AUTH_REQUEST;
-
-    
-    
     /* Check command-line args */
     if (argc != 3) {
         fprintf(stderr, "usage: %s <host> <port>\n", argv[0]);
         exit(1);
     }
 
-    listenfd = open_listenfd(argv[2]);
-    //list_files();
+    int listenfd;
+    socklen_t clientlen;
+    struct sockaddr_in clientaddr;
 
-    struct myftp_header REPLY;
+    listenfd = open_listenfd(argv[2]);
+
+    struct myFTP_Header REPLY;
+    uint32_t message_length;
     char recv_buffer[MAXLINE];
+
     while (1) {
         clientlen = sizeof(clientaddr);
-        //connfd = malloc(sizeof(int));
         connfd = accept(listenfd, (struct sockaddr *) &clientaddr, &clientlen);
         if (connfd > 0){
 
-            //printf("connected! %d server\n", connfd);
-            /*
-            while (!read(connfd, &OPEN_CONN_REPLY, sizeof(OPEN_CONN_REPLY)));
-            if (!strncmp(OPEN_CONN_REPLY.m_protocol, "\xe3myftp", 6)){
-                OPEN_CONN_REPLY.m_type = 0xA2;
-                OPEN_CONN_REPLY.m_status = 1;
-                //printf("server reveived request header\n");
-                write(connfd, &OPEN_CONN_REPLY, sizeof(OPEN_CONN_REPLY));
-            }
-            */
             open_connection();
-            /*
-            while (!read(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY)));
-            while (!read(connfd, auth, MAXLINE));
-            auth[AUTH_REPLY.m_length - 13] = '\0';
-            //AUTH_REQUEST.m_payload[AUTH_REPLY.m_length - 13] = '\0';
-            if (!strncmp(AUTH_REPLY.m_protocol, "\xe3myftp", 6) && AUTH_REPLY.m_type == 0xA3){
-                //memcpy(AUTH_REPLY.m_protocol, "\xe3myftp", 6);
-                AUTH_REPLY.m_type = 0xA4;
-                AUTH_REPLY.m_length = 12;
-                //printf("%ld %s\n", strlen(auth), auth);
-                if (!strcmp(auth, "user 123123")){
-                    AUTH_REPLY.m_status = 1;
-                    write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-                } else {
-                    AUTH_REPLY.m_status = 0;
-                    write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-                    close(connfd);
-                }
-                
-                //printf("server reveived request header\n");
-                //write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-            }
-            */
-            //while (!read(connfd, &REPLY, sizeof(REPLY)));
-            size_t size = 0;
-            while (size < sizeof(struct myftp_header)) {
-                size_t b = recv(connfd, recv_buffer + size, MAXLINE, 0);
-                if (b == 0) {printf("socket Closed"); break;} // 当连接断开
-                if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
-                size += b; // 成功将b个byte塞进了缓冲区
-            }
-            //while((size += recv(connfd, recv_buffer + size, MAXLINE, 0)) < sizeof(struct myftp_header));
-            printf("fir %ld\n", size);
-            memcpy(&REPLY, recv_buffer, sizeof(REPLY));
-            printf("%d\n", REPLY.m_length);
-            while (size < ntohl(REPLY.m_length)) {
-                size_t b = recv(connfd, recv_buffer + size, MAXLINE, 0);
-                if (b == 0) {printf("socket Closed"); break;} // 当连接断开
-                if (b < 0) {printf("Error ?"); break;} // 这里可能发生了一些意料之外的情况
-                size += b; // 成功将b个byte塞进了缓冲区
-            }
-            printf("sec\n");
-            if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA3){
-                if (!authentication(recv_buffer + sizeof(struct myftp_header))){
-                    continue;
-                }
-            } else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xAB){
-                close_connection();
-                continue;
-            }
+            
             while (1){
                 while (!read(connfd, &REPLY, sizeof(REPLY)));
-                if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA5){
-                    //printf("go list\n");
+
+                size_t size = 12;
+                message_length = ntohl(REPLY.m_length);
+                while (size < message_length) {
+                    size_t b = read(connfd, recv_buffer + size - 12, MAXLINE);
+                    if (b == 0) {printf("Socket closed.\n"); break;}
+                    if (b < 0) {printf("Error\n"); break;}
+                    size += b;
+                }
+
+                if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA3){
+                    if (!authentication(recv_buffer)) break;
+                }
+                else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA5){
                     list_files();
                 }
                 else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA7){
-                    download_files(REPLY.m_length - 13);
+                    download_files(recv_buffer);
                 }
                 else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xA9){
-                    upload_files(REPLY.m_length - 13);
+                    upload_files(recv_buffer);
                 }
                 else if (!strncmp(REPLY.m_protocol, "\xe3myftp", 6) && REPLY.m_type == (char)0xAB){
                     close_connection();
                     break;
                 }
             }
-            
-        //pthread_create(&tid, NULL, thread, connfdp);
         }
     }
 
@@ -173,9 +104,10 @@ int open_listenfd(char* port){
 }
 
 void open_connection(){
-    struct myftp_header OPEN_CONN_REPLY;
+    struct myFTP_Header OPEN_CONN_REPLY;
 
     while (!read(connfd, &OPEN_CONN_REPLY, sizeof(OPEN_CONN_REPLY)));
+
     if (!strncmp(OPEN_CONN_REPLY.m_protocol, "\xe3myftp", 6)){
         OPEN_CONN_REPLY.m_type = 0xA2;
         OPEN_CONN_REPLY.m_status = 1;
@@ -186,7 +118,7 @@ void open_connection(){
 }
 
 int authentication(char* payload){
-    struct myftp_header AUTH_REPLY;
+    struct myFTP_Header AUTH_REPLY;
 
     memcpy(AUTH_REPLY.m_protocol, "\xe3myftp", 6);
     AUTH_REPLY.m_type = 0xA4;
@@ -195,102 +127,109 @@ int authentication(char* payload){
     if (!strcmp(payload, "user 123123\0")){
         AUTH_REPLY.m_status = 1;
         write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-        /*
-        size_t size = 0;
-        while (size < sizeof(struct myftp_header)) {
-            size_t b = send(connfd, &AUTH_REPLY + size, sizeof(struct myftp_header) - size, 0);
-            if (b == 0) printf("socket Closed"); // 当连接断开
-            if (b < 0) printf("Error ?"); // 这里可能发生了一些意料之外的情况
-            size += b; // 成功将b个byte塞进了缓冲区
-        }
-        */
         return 1;
     } else {
         AUTH_REPLY.m_status = 0;
         write(connfd, &AUTH_REPLY, sizeof(AUTH_REPLY));
-        /*
-        size_t size = 0;
-        while (size < sizeof(struct myftp_header)) {
-            size_t b = send(connfd, &AUTH_REPLY + size, sizeof(struct myftp_header) - size, 0);
-            if (b == 0) printf("socket Closed"); // 当连接断开
-            if (b < 0) printf("Error ?"); // 这里可能发生了一些意料之外的情况
-            size += b; // 成功将b个byte塞进了缓冲区
-        }
-        */
         close(connfd);
         return 0;
     }
 }
 
 void list_files(){
-    struct myftp_header LIST_REPLY;
+    struct myFTP_Header LIST_REPLY;
+    char send_buffer[MAXLINE];
     FILE *fp;
-    char payload[MAXLINE];// = "----- file list start -----\n";
+    
     fp = popen("ls", "r");
-    int len = 0;//strlen(payload);
+    int len = 0;
+    char* payload = send_buffer + 12;
+
     while(fgets(payload + len, MAXLINE, fp)!= NULL){
         len = strlen(payload);
         payload[len - 1] = '\n';
     }
     fclose(fp);
     payload[strlen(payload)] = '\0';
-    //strcat(payload, "----- file list end -----\n\0");
+    len = 12 + strlen(payload) + 1;
 
-    //bzero(&LIST_REPLY, sizeof(LIST_REPLY));
     memcpy(LIST_REPLY.m_protocol, "\xe3myftp", 6);
     LIST_REPLY.m_type = 0xA6;
-    LIST_REPLY.m_length = 12 + strlen(payload) + 1;
-    write(connfd, &LIST_REPLY, sizeof(LIST_REPLY));
-    write(connfd, payload, strlen(payload));
+    LIST_REPLY.m_length = htonl(len);
+    memcpy(send_buffer, &LIST_REPLY, sizeof(LIST_REPLY));
+    write(connfd, send_buffer, len);
 
     return;
-    /*
-    while (!read(connfd, &LIST_REPLY, sizeof(LIST_REPLY)));
-    if (!strncmp(LIST_REPLY.m_protocol, "\xe3myftp", 6) && LIST_REPLY.m_type == 0xA5){
-        LIST_REPLY.m_type = 0xA6;
-        LIST_REPLY.m_length = 12 + strlen(payload) + 1;
-        write(connfd, &LIST_REPLY, sizeof(LIST_REPLY));
-        write(connfd, payload, strlen(payload));
-    }*/
 }
 
-void download_files(int filename_length){
-    struct myftp_header GET_REPLY;
-    char filename[filename_length + 1];
-    while (!read(connfd, filename, filename_length));
-    filename[filename_length] = '\0';
+void download_files(char* filename){
+    struct myFTP_Header GET_REPLY;
 
     memcpy(GET_REPLY.m_protocol, "\xe3myftp", 6);
     GET_REPLY.m_type = 0xA8;
-    GET_REPLY.m_length = 12;
+    GET_REPLY.m_length = htonl(12);
     
     FILE *fp = fopen(filename, "rb");
-
     if (fp == NULL){
         GET_REPLY.m_status = 0;
         write(connfd, &GET_REPLY, sizeof(GET_REPLY));
         return;
     }
+
     GET_REPLY.m_status = 1;
     write(connfd, &GET_REPLY, sizeof(GET_REPLY));
     fseek(fp, 0, SEEK_END);
-    unsigned long filesize = ftell(fp);
-    char *buffer = (char*)malloc(sizeof(char)*filesize);
+    unsigned long file_size = ftell(fp);
+    char *buffer = (char*)malloc(sizeof(char)*(file_size + 12));
     rewind(fp);
-    // store read data into buffer
-    fread(buffer, sizeof(char), filesize, fp);
+    fread(buffer + 12, sizeof(char), file_size, fp);
 
     GET_REPLY.m_type = 0xFF;
-    GET_REPLY.m_length = 12 + (uint32_t)filesize;
-    write(connfd, &GET_REPLY, sizeof(GET_REPLY));
-    write(connfd, buffer, filesize);
+    GET_REPLY.m_length = htonl(12 + (uint32_t)file_size);
+    memcpy(buffer, &GET_REPLY, sizeof(GET_REPLY));
+    write(connfd, buffer, sizeof(GET_REPLY) + file_size);
+    free(buffer);
+
+    return;
 }
 
-void upload_files(int filename_length){
+void upload_files(char* payload){
+    struct myFTP_Header PUT_REPLY;
 
+    memcpy(PUT_REPLY.m_protocol, "\xe3myftp", 6);
+    PUT_REPLY.m_type = 0xAA;
+    PUT_REPLY.m_length = htonl(12);
+    write(connfd, &PUT_REPLY, sizeof(PUT_REPLY));
+    
+    while (!read(connfd, &PUT_REPLY, sizeof(PUT_REPLY)));
+
+    size_t file_size = ntohl(PUT_REPLY.m_length) - 12, size = 0;
+    char* buffer = (char*)malloc(sizeof(char)*file_size);
+
+    while (size < file_size) {
+        size_t b = read(connfd, buffer + size, file_size - size);
+        if (b == 0) {printf("Socket closed.\n"); break;}
+        if (b < 0) {printf("Error\n"); break;}
+        size += b;
+    }
+
+    FILE *fp;
+    fp = fopen(payload, "wb");
+    fwrite(buffer, 1, file_size, fp);
+    fclose(fp);
+    free(buffer);
+
+    return;
 }
 
 void close_connection(){
+    struct myFTP_Header QUIT_REPLY;
+
+    memcpy(QUIT_REPLY.m_protocol, "\xe3myftp", 6);
+    QUIT_REPLY.m_type = 0xAC;
+    QUIT_REPLY.m_length = htonl(12);
+    write(connfd, &QUIT_REPLY, sizeof(QUIT_REPLY));
     close(connfd);
+    
     return;
 }
