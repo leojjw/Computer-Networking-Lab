@@ -182,6 +182,7 @@ void download_files(char* filename){
     char *buffer = (char*)malloc(sizeof(char)*len);
     rewind(fp);
     fread(buffer + 12, sizeof(char), file_size, fp);
+    fclose(fp);
 
     GET_REPLY.m_type = 0xFF;
     GET_REPLY.m_length = htonl((uint32_t)len);

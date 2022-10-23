@@ -270,6 +270,7 @@ void upload_files(char* payload){
     buffer = (char*)malloc(sizeof(char)*length);
     rewind(fp);
     fread(buffer + 12, sizeof(char), file_size, fp);
+    fclose(fp);
 
     PUT_REQUEST.m_type = 0xFF;
     PUT_REQUEST.m_length = htonl((uint32_t)length);
