@@ -127,6 +127,7 @@ int sendMessage(const char* message){
             }
         }
     }
+    free(buffer);
 
     if (nextseqnum > packet_num){
         return 0;
@@ -216,6 +217,8 @@ int sendMessageOpt(const char* message){
             }
         }
     }
+    free(buffer);
+    free(ack_num);
     
     if (nextseqnum > packet_num){
         return 0;

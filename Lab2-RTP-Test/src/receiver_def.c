@@ -107,13 +107,18 @@ int recvMessage(char* filename){
             sendACK(packet.rtp.seq_num);
             close(sockfd_receiver);
             fclose(fp);
+            free(ack_num);
+            free(buffer);
+            free(buffer_length);
             return received_bytes;
         } else if (ret == -1){
-            fclose(fp);
-            return -1;
+            break;
         }
     }
     fclose(fp);
+    free(ack_num);
+    free(buffer);
+    free(buffer_length);
     return -1;
 }
 
@@ -171,13 +176,18 @@ int recvMessageOpt(char* filename){
             sendACK(packet.rtp.seq_num);
             close(sockfd_receiver);
             fclose(fp);
+            free(ack_num);
+            free(buffer);
+            free(buffer_length);
             return received_bytes;
         } else if (ret == -1){
-            fclose(fp);
-            return -1;
+            break;
         }
     } 
     fclose(fp);
+    free(ack_num);
+    free(buffer);
+    free(buffer_length);
     return -1;
 }
 
